@@ -1,0 +1,45 @@
+---
+- hosts: master
+  vars_prompt:
+    - name: "jenkins_ssh_passphrase"
+      prompt: "Enter the passphrase for the jenkins SSH key"
+
+  tasks:
+   - name: Install zsh
+     package:
+       name: zsh
+       state: present
+   - name: Install tar
+     package:
+       name: tar
+       state: present
+   - name: Create root private key
+     openssh_keypair:
+       path: /root/.ssh/id_ed25519
+       type: ed25519
+     register: root_public_key
+   - name: Create user jenkins with ssh key
+     user:
+       name: jenkins
+       shell: /bin/zsh
+       generate_ssh_key: yes
+       ssh_key_type: ed25519
+       ssh_key_file: .ssh/id_ed25519
+       ssh_key_passphrase: "{{jenkins_ssh_passphrase}}"
+   - name: Get jenkins private key
+     command: cat /home/jenkins/.ssh/id_ed25519
+     register: jenkins_private_key
+   - name: Add roots public key to jenkins authorized_keys
+     authorized_key:
+       user: jenkins
+       key: "{{root_public_key.public_key}}"
+   - name: Add user agent
+     user:
+       name: agent
+       shell: /bin/zsh  
+   - name: Add roots public key to agents authorized_keys
+     authorized_key:
+       user: agent
+       key: "{{root_public_key.public_key}}"
+   - name: Install docker-rootless for jenkins
+     

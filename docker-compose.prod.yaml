@@ -1,0 +1,62 @@
+version: '3'
+services:
+  traefik:
+    image: traefik:latest
+    container_name: traefik
+    restart: always
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.websecure.address=:443
+    ports:
+      - 443:443
+      - 8080:8080
+    volumes:
+      - /run/user/{{user-id}}/docker.sock:/var/run/docker.sock
+      - ./data/traefik/letsencrypt:/letsencrypt
+    networks:
+      - jenkins
+
+  jenkins:
+    build:
+      target: jenkins_prod
+    restart: always
+    volumes:
+      - ./jenkins/casc.yaml:/home/jenkins/casc.yaml
+      - ./jenkins/seed.groovy:/home/jenkins/seed.groovy
+      - ./data/jenkins/jobs:/home/jenkins/jobs
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.jenkins.entrypoints=websecure
+      - traefik.http.routers.jenkins.tls=true
+      - traefik.http.routers.jenkins.rule=Host(`jenkins.{{fqdn}}`)
+      - traefik.http.routers.jenkins.service=jenkins
+      - traefik.http.services.jenkins.loadbalancer.server.port=8080
+    networks:
+      - jenkins
+
+  vault:
+    image: vault
+    container_name: vault
+    restart: always
+    volumes:
+      - ./data/vault/logs:/vault/logs
+      - ./data/vault/file:/vault/file
+      - ./vault:/vault/config
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vault.entrypoints=websecure
+      - traefik.http.routers.vault.tls=true
+      - traefik.http.routers.vault.rule=Host(`vault.{{fqdn}}`)
+      - traefik.http.routers.vault.service=vault
+      - traefik.http.services.vault.loadbalancer.server.port=8200
+    entrypoint: vault server -config=/vault/config/vault.json
+    environment:
+      - VAULT_ADDR=http://localhost:8200
+    networks:
+      - jenkins
+
+networks:
+  jenkins:
+    external: false

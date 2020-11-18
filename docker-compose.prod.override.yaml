@@ -1,0 +1,6 @@
+version: '3'
+services:
+  jenkins:
+    volumes:
+      - ./data/jenkins/secret.key:/home/jenkins/secret.key
+      - ./data/jenkins/secrets:/home/jenkins/secrets

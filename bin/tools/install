@@ -1,0 +1,30 @@
+#!/bin/bash
+
+./create_public_key /root root
+./log info "Adding ssh key to ssh-agent"
+eval `ssh-agent`
+ssh-add
+
+./create_user jenkins
+
+./install_docker jenkins
+
+./create_user agent
+
+./install_docker agent
+
+./log info add jenkins public key to agent user
+cat /home/jenkins/.ssh/id_ed25519.pub >> /home/agent/.ssh/authorized_keys
+
+./log warn "Make sure you added jenkins public key to its bitbucket user"
+cat /home/jenkins/.ssh/id_ed25519.pub
+read -p "Press enter to continue" resume
+
+ufw allow proto tcp from any to any port 443
+
+./clone_repository
+
+./log info "Use those commands to switch to jenkins user and finish the configuration
+    su - jenkins
+    cd jenkins/bin/tools
+    ./finish_configuration"

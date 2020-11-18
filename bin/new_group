@@ -1,0 +1,168 @@
+#!/bin/bash
+
+VAULT_TEMPLATE='# List all teams in kv/
+path "kv/metadata/" {
+    capabilities = [ "list" ]
+}
+
+# Read kv/secret
+# Can be used for testing connection to vault
+path "kv/data/secret" {
+  capabilities = [ "read" ]
+}
+
+# List everything under kv/triplex
+# View metadata for everything under kv/triplex (enables history and delete and destroy for versions of secrets)
+# Delete whole secret
+path "kv/metadata/triplex/*" {
+    capabilities = [ "list", "read", "delete" ]
+}
+
+# Create a new secret
+# Read a secret
+# Create new version of a secret
+# Delete latest version of a secret
+path "kv/data/triplex/*" {
+    capabilities = [ "create", "read", "update", "delete" ]
+}
+
+# Restore a deleted version of a secret
+path "kv/undelete/triplex/*" {
+  capabilities = [ "update" ]
+}
+
+# Delete a specific version of a secret
+path "kv/delete/triplex/*" {
+  capabilities = [ "update" ]
+}
+
+# Permanently remove a version of a secret
+path "kv/destroy/triplex/*" {
+  capabilities = [ "update" ]
+}'
+
+JENKINS_TEMPLATE='queue("<group-name>/Seed")
+
+def vaultDomain = "triplex-vault"
+def vaultCredential = "triplex-vault"
+def vaultAppRoleId = "16fdb018-e428-1275-a6dc-9b4f4b02d273"
+def vaultAppRoleSecret = "{AQAAABAAAAAwNRSx8bVY3gDBHUTrzqvP9+e/3w8zxMGUESnk1wuHF1MwoHYgbtg0O2kBz7gt/5HazFNYOMBvjrP7FHnBRS5Lfw==}"
+
+folder("Triplex") {
+  authorization {
+    permission("hudson.model.Item.Build", "MOB.Team-TripleX.core")
+    permission("hudson.model.Item.Read", "MOB.Team-TripleX.core")
+    permission("hudson.model.Item.Workspace", "MOB.Team-TripleX.core")
+  }
+  properties {
+    folderCredentialsProperty {
+      domainCredentials {
+        domainCredentials {
+          domain {
+            description("Vault")
+            name(vaultDomain)
+          }
+        }
+      }
+    }
+
+    folderVaultConfiguration {
+      configuration {
+        vaultCredentialId(vaultCredential)
+      }
+    }
+  }
+
+  configure { folderXml ->
+    def domainCredentialsMap = folderXml /
+        "properties" /
+        "com.cloudbees.hudson.plugins.folder.properties.FolderCredentialsProvider_-FolderCredentialsProperty" /
+        "domainCredentialsMap"
+
+    def vaultEntry = domainCredentialsMap."*".find { node ->
+      node."com.cloudbees.plugins.credentials.domains.Domain".name.text() == vaultDomain
+    }
+    def vaultList = vaultEntry / "java.util.concurrent.CopyOnWriteArrayList"
+    vaultList << "com.datapipe.jenkins.vault.credentials.VaultAppRoleCredential" {
+      id(vaultCredential)
+      path("approle")
+      description("TripleX approle token for vault")
+      roleId(vaultAppRoleId)
+      scope("GLOBAL")
+      secretId(vaultAppRoleSecret)
+    }
+  }
+}
+
+job("Triplex/Seed") {
+  scm {
+    git {
+      remote {
+        url "ssh://git@bitbucket.valtech.de:7999/vwmod4/licensemgmt-jenkins.git"
+        credentials "jenkins-git"
+      }
+      extensions {
+        cloneOptions {
+          shallow = true
+        }
+      }
+    }
+  }
+  steps {
+    dsl {
+      external "*.groovy"
+      removeAction "DELETE"
+      ignoreExisting
+    }
+  }
+  properties {
+    authorizeProjectProperty{
+      strategy {
+        triggeringUsersAuthorizationStrategy()
+      }
+    }
+  }
+}
+
+queue("Triplex/Seed")
+'
+
+BASE_DIR=/home/jenkins/jenkins
+BIN=$BASE_DIR/bin
+TOOLS=$BIN/tools
+
+$TOOLS/log info "Creating a new group..."
+read -p "Technical group name in LDAP: " TECHNICAL_NAME
+read -p "Human readable name: " NAME
+
+if [ ! -d "$BASE_DIR/vault/groups" ]
+then
+    mkdir "$BASE_DIR/vault/groups"
+fi
+
+printf "$VAULT_TEMPLATE" | sed "s/<path>/$NAME/g" > $BASE_DIR/vault/groups/$TECHNICAL_NAME.hcl
+
+# $BIN/update_groups
+
+UPPER_NAME=$(echo "${NAME^}")
+
+read -p "URL of repository for jobs in bitbucket: " REMOTE_URL
+
+if [ ! -d "$BASE_DIR/jenkins/teams" ]
+then
+    mkdir "$BASE_DIR/jenkins/teams"
+fi
+
+printf "$JENKINS_TEMPLATE" | sed "s/<group-name>/$UPPER_NAME/g" | sed "s/<remote-url>/$REMOTE_URL/g" > $BASE_DIR/jenkins/teams/$TECHNICAL_NAME.groovy
+
+$TOOLS/log info "Updating groups in vault. Please restart jenkins manually"
+
+$BIN/update_vault_groups
+
+$VAULT write auth/approle/role/$NAME token_policies="$TECHNICAL_NAME"
+
+ROLE_ID=$($VAULT read auth/approle/role/$NAME/role-id | grep "role_id" | tr -s " " | cut -d " " -f2)
+SECRET_ID=$($VAULT write -f auth/approle/role/$NAME/secret-id | grep "secret_id " | tr -s " " | cut -d " " -f2)
+
+printf "RoleId: $ROLE_ID"
+printf "SecretId: $SECRET_ID"

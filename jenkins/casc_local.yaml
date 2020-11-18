@@ -1,0 +1,53 @@
+credentials:
+  system:
+    domainCredentials:
+    - credentials:
+      - basicSSHUserPrivateKey:
+          description: "Private key for jenkins git access"
+          id: "jenkins-git"
+          passphrase: "{{jenkins-git-passphrase}}"
+          privateKeySource:
+            directEntry:
+              privateKey: "{{jenkins-git-private-key}}"
+          scope: GLOBAL
+          username: "jenkins"
+      - vaultTokenCredential:
+          description: "vault"
+          id: "vault"
+          scope: GLOBAL
+          token: ""
+
+jenkins:
+  authorizationStrategy:
+    globalMatrix:
+      grantedPermissions:
+      - "Overall/Administer:anonymous"
+  remotingSecurity: 
+    enabled: true
+
+security:
+  queueItemAuthenticator:
+    authenticators:
+    - global:
+        strategy: "anonymousAuthorizationStrategy"
+
+unclassified:     
+  hashicorpVault:
+    configuration:
+      engineVersion: 2
+      timeout: 60
+      vaultCredentialId: "vault"
+      vaultUrl: "https://vault.{{fqdn}}"
+  location:
+    url: "http://localhost:8080"
+
+jobs:
+  - script: >
+      job('LocalSeed') {
+        steps {
+          dsl {
+            external '*'
+          }
+        }
+      }
+  - script: queue('LocalSeed')

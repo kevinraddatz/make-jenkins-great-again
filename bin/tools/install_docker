@@ -1,0 +1,4 @@
+#!/bin/bash
+
+./log info "Installing docker rootless for $1"
+./execute_as $1 "curl -fsSL https://get.docker.com/rootless | sh | grep export >> ~/.bashrc && systemctl --user enable docker && loginctl enable-linger $1 && systemctl --user restart docker"

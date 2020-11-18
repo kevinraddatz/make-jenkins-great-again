@@ -1,0 +1,12 @@
+#!/bin/bash
+
+BASE_DIR=/home/jenkins/jenkins
+BIN=$BASE_DIR/bin
+TOOLS=$BIN/tools
+
+$BIN/pull_images $@
+
+$BIN/build_images $@
+
+$TOOLS/log info "Restarting services..."
+docker-compose -f $BASE_DIR/docker-compose.yaml -f $BASE_DIR/docker-compose.prod.yaml -f $BASE_DIR/docker-compose.prod.override.yaml restart $@

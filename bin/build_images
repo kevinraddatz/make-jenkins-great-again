@@ -1,0 +1,7 @@
+#!/bin/bash
+
+BASE_DIR=/home/jenkins/jenkins
+TOOLS=$BASE_DIR/bin/tools
+
+$TOOLS/log info "Building images"
+docker-compose -f $BASE_DIR/docker-compose.yaml -f $BASE_DIR/docker-compose.prod.yaml -f $BASE_DIR/docker-compose.prod.override.yaml build $@

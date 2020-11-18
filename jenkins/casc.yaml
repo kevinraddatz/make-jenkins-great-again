@@ -1,0 +1,158 @@
+credentials:
+  system:
+    domainCredentials:
+    - credentials:
+      - basicSSHUserPrivateKey:
+          description: "Private key for jenkins git access"
+          id: "jenkins-git"
+          passphrase: "{{jenkins-git-passphrase}}"
+          privateKeySource:
+            directEntry:
+              privateKey: "{{jenkins-git-private-key}}"
+          scope: GLOBAL
+          username: "jenkins"
+      - basicSSHUserPrivateKey:
+          description: "Private key for build nodes"
+          id: "jenkins-build-node"
+          passphrase: "{{jenkins-build-node-passphrase}}"
+          privateKeySource:
+            directEntry:
+              privateKey: "{{jenkins-build-node-private-key}}"
+          scope: GLOBAL
+          username: "agent"
+
+jenkins:
+  agentProtocols: 
+  - JNLP4-connect
+  - Ping
+  authorizationStrategy:
+    projectMatrix:
+      permissions:
+      - "Agent/Build:<All other users with access to jenkins>"
+      - "Agent/Build:<Technical jenkins user in ldap>"
+      - "Agent/Create:<Technical jenkins user in ldap>"
+      - "Job/Build:<All other users with access to jenkins>"
+      - "Job/Build:<Technical jenkins user in ldap>"
+      - "Job/Configure:<Technical jenkins user in ldap>"
+      - "Job/Create:<Technical jenkins user in ldap>"
+      - "Job/Delete:<Technical jenkins user in ldap>"
+      - "Job/Read:<Technical jenkins user in ldap>"
+      - "Overall/Administer:<An administrator group for jenkins>"
+      - "Overall/Read:<All other users with access to jenkins>"
+      - "Overall/Administer:anonymous"
+  crumbIssuer:
+    standard: 
+      excludeClientIPFromCrumb: false
+  disableRememberMe: true
+  disabledAdministrativeMonitors: 
+  - jenkins.security.RekeySecretAdminMonitor
+  labelAtoms:
+  - name: "{{fqdn}}"
+  - name: master
+  markupFormatter: plainText
+  mode: NORMAL
+  myViewsTabBar: standard
+  nodes:
+  - permanent:
+      launcher:
+        ssh: 
+          credentialsId: jenkins-build-node
+          host: "{{fqdn}}"
+          port: 22,
+          sshHostKeyVerificationStrategy: nonVerifyingKeyVerificationStrategy
+      name: "{{fqdn}}"
+      remoteFS: /home/agent
+      retentionStrategy: always
+  numExecutors: 0
+  projectNamingStrategy: standard
+  quietPeriod: 5
+  remotingSecurity: 
+    enabled: true
+  scmCheckoutRetryCount: 0
+  # if you copied from configurationAsCode export, replace ldap->configurations->inhibitferRootDN with inhibitInferRootDN
+  # securityRealm:
+  slaveAgentPort: 50000
+  updateCenter:
+    sites:
+    - id: default
+      url: 'https://updates.jenkins.io/update-center.json'
+  viewsTabBar: standard
+security:
+  apiToken: 
+    creationOfLegacyTokenEnabled: false
+    tokenGenerationOnCreationEnabled: false
+    usageStatisticsEnabled: true
+  copyartifact: 
+    mode: PRODUCTION
+  globalJobDslSecurityConfiguration: 
+    useScriptSecurity: false
+  queueItemAuthenticator:
+    authenticators:
+    - global: 
+        strategy: 
+          specificUsersAuthorizationStrategy: 
+            userid: <Technical jenkins user in ldap>
+  sSHD: 
+    port: -1
+unclassified:
+  hashicorpVault:
+    configuration:
+      engineVersion: 2
+      timeout: 60
+      vaultCredentialId: "vault"
+      vaultUrl: "http://vault:8200"
+  bitbucketEndpointConfiguration:
+    endpoints:
+    - bitbucketCloudEndpoint: 
+        enableCache: false
+        manageHooks: false
+        repositoriesCacheDuration: 0
+        teamCacheDuration: 0
+  buildDiscarders:
+    configuredBuildDiscarders: 
+    - jobBuildDiscarder
+  buildStepOperation: 
+    enabled: false
+  defaultFolderConfiguration:
+    healthMetrics:
+    - worstChildHealthMetric: 
+        recursive: true
+  fingerprints: 
+    fingerprintCleanupDisabled: false
+    storage: file
+  gitSCM: 
+    allowSecondFetch: false
+    createAccountBasedOnEmail: false
+    disableGitToolChooser: false
+    hideCredentials: false
+    showEntireCommitSummaryInChanges: false
+    useExistingAccountWithSameEmail: false
+  junitTestResultStorage: 
+    storage: file
+  location: 
+    adminAddress: address not configured yet <nobody@nowhere>
+    url: 'https://jenkins.{{fqdn}}'
+  mailer: 
+    charset: UTF-8
+    useSsl: false
+    useTls: false
+  mavenModuleSet: 
+    localRepository: default
+  pollSCM: 
+    pollingThreadCount: 10
+  timestamper: 
+    allPipelines: false
+    elapsedTimeFormat: '''<b>''HH:mm:ss.S''</b> '''
+    systemTimeFormat: '''<b>''HH:mm:ss''</b> '''
+  upstream: 
+    globalUpstreamFilterStrategy: UseOldest
+tool:
+  git:
+    installations:
+    - home: git
+      name: Default
+  mavenGlobalConfig: 
+    globalSettingsProvider: standard
+    settingsProvider: standard
+jobs:
+- file: ./seed.groovy

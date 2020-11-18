@@ -1,0 +1,12 @@
+#!/bin/bash
+
+BASE_DIR="/home/jenkins/jenkins"
+
+if [ ! -d "$BASE_DIR" ]
+then
+
+    ./log info "Clone template repository to $BASE_DIR"
+    git clone https://bitbucket.valtech.de/bb/scm/valthack/jenkins-template.git $BASE_DIR
+fi
+chown jenkins:jenkins -R /home/jenkins/jenkins
+chmod +x -R /home/jenkins/jenkins/bin

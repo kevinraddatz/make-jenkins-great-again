@@ -1,0 +1,30 @@
+#!/bin/bash
+
+NODE_TEMPLATE='- permanent:
+      launcher:
+        ssh: 
+          credentialsId: jenkins-build-node
+          host: "{{fqdn}}"
+          port: 22,
+          sshHostKeyVerificationStrategy: nonVerifyingKeyVerificationStrategy
+      name: "{{fqdn}}"
+      remoteFS: /home/agent
+      retentionStrategy: always'
+
+TOOLS=/home/jenkins/jenkins/bin/tools
+
+$TOOLS/info log "Setup a new node"
+
+read -p "Enter the FQDN of the new node: " FQDN
+
+$TOOLS/log info "Make sure you added jenkins public key on the remote root user at $FQDN"
+cat /home/jenkins/.ssh/id_ed25519.pub
+read -p "Press enter to continue" resume
+
+$TOOLS/execute_as root $FQDN "yum install -y yum-utils \
+    && yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo \
+    && yum install -y docker-ce docker-ce-cli containerd.io"
+
+$TOOLS/log info "Don't forget to update to your jenkins/casc.yaml"
+
+printf $NOTE_TEMPLATE | sed "s/{{fqdn}}/$FQDN/g" 

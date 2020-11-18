@@ -1,0 +1,18 @@
+#!/bin/bash
+
+TOOLS=/home/jenkins/jenkins/bin/tools
+
+$TOOLS/log info "Updating groups"
+
+docker exec -it vault vault login
+
+VAULT="docker exec vault"
+
+FILES=$($VAULT find /vault/config/groups -type f )
+
+for FILE in $FILES
+do
+    GROUP=$(basename $FILE .hcl)
+    docker exec vault vault policy write $GROUP $FILE
+    docker exec vault vault write auth/ldap/groups/$GROUP policies=$GROUP
+done

@@ -1,0 +1,7 @@
+version: '3'
+services:
+  jenkins:
+    build:
+      context: ./jenkins/
+    image: jenkins
+    container_name: jenkins

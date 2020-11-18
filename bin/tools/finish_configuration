@@ -1,0 +1,102 @@
+#!/bin/bash
+
+ENV_TEMPLATE='COMPOSE_FILE=docker-compose.yaml;docker-compose.prod.yaml;docker-compose.prod.override.yaml\nCOMPOSE_PATH_SEPARATOR=;'
+
+BASE_DIR="/home/jenkins/jenkins"
+
+read -p "FQDN of this server: " FQDN
+
+./log info "Replace user id in docker-compose.prod.yaml"
+sed -i "s/{{user-id}}/$(id -u jenkins)/g" $BASE_DIR/docker-compose.prod.yaml
+./log info "Replace FQDN in docker-compose.prod.yaml and jenkins/casc.yaml" 
+sed -i "s/{{fqdn}}/$(./escape_variable $FQDN)/g" $BASE_DIR/docker-compose.prod.yaml
+sed -i "s/{{fqdn}}/$(./escape_variable $FQDN)/g" $BASE_DIR/jenkins/casc.yaml
+
+sed -i "s/{{fqdn}}/$(./escape_variable $FQDN)/g" $BASE_DIR/jenkins/casc_local.yaml
+
+./log info "Starting vault and traefik"
+docker-compose -f $BASE_DIR/docker-compose.yaml -f $BASE_DIR/docker-compose.prod.yaml up -d vault traefik
+
+sleep 3s
+
+./log info "Initialize vault with jenkins policy"
+VAULT="docker exec vault vault"
+VAULT_LOG=$($VAULT operator init)
+VAULT_UNSEAL_1=$(printf "$VAULT_LOG" | grep "Unseal Key 1: " | cut -d " " -f4)
+VAULT_UNSEAL_2=$(printf "$VAULT_LOG" | grep "Unseal Key 2: " | cut -d " " -f4)
+VAULT_UNSEAL_3=$(printf "$VAULT_LOG" | grep "Unseal Key 3: " | cut -d " " -f4)
+VAULT_UNSEAL_4=$(printf "$VAULT_LOG" | grep "Unseal Key 4: " | cut -d " " -f4)
+VAULT_UNSEAL_5=$(printf "$VAULT_LOG" | grep "Unseal Key 5: " | cut -d " " -f4)
+VAULT_PASSWORD=$(printf "$VAULT_LOG" | grep "Initial Root Token: " | cut -d " " -f4)
+$VAULT operator unseal $VAULT_UNSEAL_1
+$VAULT operator unseal $VAULT_UNSEAL_2
+$VAULT operator unseal $VAULT_UNSEAL_3
+$VAULT login $VAULT_PASSWORD
+$VAULT secrets enable -path=kv -version=2 kv
+$VAULT auth enable approle
+$VAULT auth enable ldap
+$VAULT auth tune -default-lease-ttl=8h ldap
+$VAULT kv put kv/secret key=value
+
+./log warn "Unseal Key 1: $VAULT_UNSEAL_1"
+./log warn "Unseal Key 2: $VAULT_UNSEAL_2"
+./log warn "Unseal Key 3: $VAULT_UNSEAL_3"
+./log warn "Unseal Key 4: $VAULT_UNSEAL_4"
+./log warn "Unseal Key 5: $VAULT_UNSEAL_5"
+./log warn "Initial Root Token: $VAULT_PASSWORD"
+./log warn "Copy those keys to a secure location. If you loose them, your vault
+is lost!\n"
+read -p "Press enter to continue" resume
+./log info "\n"
+
+SSH_KEY=$(cat /home/jenkins/.ssh/id_ed25519 | sed -z 's/\n/\\\\n/g')
+read -s -p "Enter jenkins private key password. This will be put into jenkins/casc.yaml: " GIT_PASSPHRASE
+printf "\n"
+sed -i "s/{{jenkins-git-passphrase}}/$(./escape_variable $GIT_PASSPHRASE)/g" $BASE_DIR/jenkins/casc.yaml
+sed -i "s/{{jenkins-build-node-passphrase}}/$(./escape_variable $GIT_PASSPHRASE)/g" $BASE_DIR/jenkins/casc.yaml
+sed -i "s@{{jenkins-git-private-key}}@$SSH_KEY@g" /home/jenkins/jenkins/jenkins/casc.yaml
+sed -i "s@{{jenkins-build-node-private-key}}@$SSH_KEY@g" $BASE_DIR/jenkins/casc.yaml
+
+read -p "Url of your target remote repository: " REPOSITORY
+sed -i "s/{{git-remote-url}}/$(./escape_variable $REPOSITORY)/g" $BASE_DIR/jenkins/seed.groovy
+
+./log info "Starting jenkins"
+docker-compose -f $BASE_DIR/docker-compose.yaml -f $BASE_DIR/docker-compose.prod.yaml up -d --build
+
+./log info "\nAt this point you should configure your login mechanism and set permissions
+on jenkins. When you are finished open 
+https://$FQDN/configuration-as-code/viewExport and make sure to copy every
+encrypted secret from the website (the look like \"{somethingencrypted}\" into
+your jenkins/casc.yaml. Also from the export copy 
+\"jenkins->authorizationStrategy\" and \"jenkins->securityRealm\" into your
+jenkins/casc.yaml.\n"
+read -p "Press enter to continue" resume
+
+./log info "Will now commit all changes and push them to your repository"
+git config user.name "Jenkins"
+git config user.name "jenkins@$FQDN"
+git remote set-url origin $REPOSITORY
+git add $BASE_DIR
+git commit -m "Finished configuration"
+git push -f
+
+./log info "Copy secret.key and secrets for encryption from jenkins container to data directory"
+docker cp jenkins:/home/jenkins/secret.key $BASE_DIR/data/jenkins/secret.key
+docker cp jenkins:/home/jenkins/secrets $BASE_DIR/data/jenkins/secrets
+
+ADD_BIN='Y'
+read -p "Add jenkins bin to your path [Y/n]: " ADD_BIN
+if [[ "$ADD_BIN" == "Y" ]]
+then
+    NEW_PATH="PATH=$PATH:/home/jenkins/jenkins/bin"
+    case "$(printenv SHELL)" in
+        "/bin/bash") echo "$NEW_PATH" >> /home/jenkins/.bashrc && source /home/jenkins/.bashrc ;;
+        "/bin/zsh") echo "$NEW_PATH" >> /home/jenkins/.zshrc && source /home/jenkins/.zshrc    ;;
+    esac
+fi
+
+./log info "You are finished now. Good bye"
+
+cd $BASE_DIR
+echo -e $ENV_TEMPLATE > .env
+docker-compose up -d

@@ -1,0 +1,25 @@
+vault operator init
+vault unseal ...
+vault login
+vault secrets enable -path=kv -version=2 kv
+vault auth enable approle
+vault policy write jenkins jenkins.hcl
+vault write auth/approle/role/jenkins token_policies="jenkins"
+vault read auth/approle/role/jenkins/role-id
+vault write -f auth/approle/role/jenkins/secret-id
+
+vault auth enable ldap
+vault write auth/ldap/config \
+  url="ldap://gc.de.valtech.com:3268" \
+  binddn="CN=Kevin Raddatz,OU=DUS,OU=Staff,OU=Mobility,DC=DE,DC=valtech,DC=com" \
+  bindpass="top_secret" \
+  userattr="samaccountname" \
+  groupdn="ou=group,dc=foo,dc=net" \
+  groupfilter="(member:1.2.840.113556.1.4.1941:={{.UserDN}})" \
+  groupattr="cn" \
+  insecure_tls=true \
+  starttls=true \
+  deny_null_bind=true
+
+vault policy write MOB.Team-TripleX.member MOB.Team-TripleX.member.hcl
+vault write auth/ldap/group/MOB.Team-TripleX.core policies=triplex

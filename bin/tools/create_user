@@ -1,0 +1,11 @@
+#!/bin/bash
+
+id -u $1 &>/dev/null
+if [ $? == 1 ]
+then
+    ./log info "Creating user $1"
+    useradd $1
+fi
+
+./create_public_key /home/$1 $1
+chown $1:$1 -R /home/$1/.ssh

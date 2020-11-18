@@ -1,0 +1,15 @@
+#!/bin/bash
+
+TOOLS=/home/jenkins/jenkins/bin/tools
+
+$TOOLS/log info "Unlocking vault...."
+
+read -p "Unseal key 1: " UNSEAL_KEY_1
+read -p "Unseal key 2: " UNSEAL_KEY_2
+read -p "Unseal key 3: " UNSEAL_KEY_3
+
+VAULT="docker exec -it vault vault"
+
+$VAULT operator unseal $UNSEAL_KEY_1
+$VAULT operator unseal $UNSEAL_KEY_2
+$VAULT operator unseal $UNSEAL_KEY_3

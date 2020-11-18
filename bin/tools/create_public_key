@@ -1,0 +1,34 @@
+#!/bin/bash
+
+if [ ! -d "$1/.ssh" ]
+then
+    ./log info "Creating .ssh directory for $2 at $1/.ssh"
+    mkdir $1/.ssh
+    chmod 700 -R $1/.ssh
+fi
+
+if [ ! -f "$1/.ssh/id_ed25519" ]
+then
+    ./log info "Creating ed25519 ssh key for $2 at $1/.ssh/id_ed25519"
+    ssh-keygen -t ed25519 -f $1/.ssh/id_ed25519
+    chmod 600 $1/.ssh/id_ed25519
+    chmod 644 $1/.ssh/id_ed25519.pub
+fi
+
+if [ ! -f "$1/.ssh/authorized_keys" ]
+then
+    ./log info "Creating authorized_keys for $2 at $1/.ssh/authorized_keys"
+    touch $1/.ssh/authorized_keys
+    chmod 600 $1/.ssh/authorized_keys
+fi
+
+if [ "$2" != "root" ]
+then
+    cat $1/.ssh/authorized_keys | grep "$(cat /root/.ssh/id_ed25519.pub)" &>/dev/null
+    if [ $? == 1 ]
+    then
+        ./log info "Allowing current public key for $2"
+        cat /root/.ssh/authorized_keys >> $1/.ssh/authorized_keys
+        cat /root/.ssh/id_ed25519.pub >> $1/.ssh/authorized_keys
+    fi
+fi

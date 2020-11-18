@@ -1,0 +1,7 @@
+#!/bin/bash
+
+$BIN=/home/jenkins/jenkins/bin
+
+$BIN/pull_images $@
+$BIN/build_images $@
+docker-compose -f $BASE_DIR/docker-compose.yaml -f $BASE_DIR/docker-compose.prod.yaml -f $BASE_DIR/docker-compose.prod.override.yaml up -d $@
